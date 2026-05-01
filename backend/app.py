@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from routes.address_heat import router as address_router
 # Existing routes
 from routes.heatmap import router as heatmap_router
 from routes.prediction import router as prediction_router
@@ -56,6 +56,8 @@ app.include_router(
     prefix="/forecast",
     tags=["Future Heat Forecast"]
 )
+
+app.include_router(address_router, prefix="/address_heat", tags=["Address Heat"])
 
 # -------------------------------
 # Root endpoint

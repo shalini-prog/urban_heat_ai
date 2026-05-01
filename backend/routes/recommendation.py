@@ -4,58 +4,123 @@ import math
 router = APIRouter()
 
 
-def generate_recommendations(temp, humidity, vegetation, zone):
+def generate_smart_recommendations(
+    temp,
+    humidity,
+    vegetation,
+    building_density,
+    risk_level,
+    risk_score
+):
+    """
+    Generate actionable recommendations based on heat risk
+    """
 
-    recommendations = []
+    recommendations = {
+        "immediate_actions": [],
+        "short_term": [],
+        "long_term": []
+    }
 
-    # Temperature difference to reduce
-    target_temp = 35
+    # 🌡️ Temperature reduction target
+    target_temp = 30
     reduction_needed = max(temp - target_temp, 0)
 
-    # Tree calculation
-    # Rough assumption: 1 mature tree cools ~0.1°C locally
-    trees_needed = math.ceil(reduction_needed / 0.1)
+    # 🌳 Environmental calculations
+    trees_needed = math.ceil(reduction_needed / 0.1) if reduction_needed > 0 else 0
+    cool_roofs_needed = math.ceil(reduction_needed / 0.5) if reduction_needed > 0 else 0
+    water_units = math.ceil(reduction_needed / 1.5) if reduction_needed > 0 else 0
 
-    # Cool roofs
-    # Each cool roof reduces ~0.5°C
-    cool_roofs = math.ceil(reduction_needed / 0.5)
+    # 🔴 EXTREME RISK
+    if risk_level == "Extreme":
+        recommendations["immediate_actions"].extend([
+            "🚫 Stop outdoor work from 10 AM – 5 PM",
+            "🏥 Activate emergency cooling centers",
+            "🚰 Ensure continuous drinking water supply",
+            "⚠️ Issue public heat alerts"
+        ])
 
-    # Water bodies
-    water_bodies = math.ceil(reduction_needed / 1.5)
+        recommendations["short_term"].extend([
+            f"🏠 Install ~{cool_roofs_needed} cool roofs in nearby buildings",
+            f"🌳 Plant ~{trees_needed} trees in this locality",
+            f"💧 Add ~{water_units} water bodies/fountains"
+        ])
 
-    if zone == "Severe Heat Island":
+        recommendations["long_term"].extend([
+            "🏙️ Redesign urban layout to reduce heat trapping",
+            "🌿 Increase green cover to at least 30%",
+            "🧱 Use reflective materials in roads and buildings"
+        ])
 
-        recommendations.append(f"🌳 Plant approximately {trees_needed} trees")
-        recommendations.append(f"🏠 Install {cool_roofs} cool roofs")
-        recommendations.append(f"💧 Add {water_bodies} urban water bodies")
-        recommendations.append("🧱 Apply reflective road materials")
+    # 🟠 DANGER
+    elif risk_level == "Danger":
+        recommendations["immediate_actions"].extend([
+            "⚠️ Limit outdoor work during peak heat",
+            "💧 Encourage hydration breaks every 30 minutes"
+        ])
 
-    elif zone == "Heat Island":
+        recommendations["short_term"].extend([
+            f"🏠 Install ~{cool_roofs_needed} cool roofs",
+            f"🌳 Plant ~{trees_needed} trees"
+        ])
 
-        recommendations.append(f"🌳 Plant approximately {trees_needed} trees")
-        recommendations.append(f"🏠 Install {cool_roofs} cool roofs")
-        recommendations.append("🌿 Increase green parks and vegetation")
+        recommendations["long_term"].extend([
+            "🌿 Increase vegetation cover",
+            "🏗️ Reduce concrete density in future projects"
+        ])
 
-    elif zone == "Warm":
+    # 🟡 CAUTION
+    elif risk_level == "Caution":
+        recommendations["immediate_actions"].append(
+            "🌤️ Monitor heat conditions and stay hydrated"
+        )
 
-        recommendations.append("🌳 Increase roadside tree plantation")
-        recommendations.append("🌿 Improve urban green cover")
+        recommendations["short_term"].append(
+            "🌳 Increase roadside plantation"
+        )
 
+        recommendations["long_term"].append(
+            "🌿 Maintain green zones"
+        )
+
+    # 🟢 NORMAL
     else:
+        recommendations["immediate_actions"].append(
+            "✅ Conditions are safe"
+        )
 
-        recommendations.append("🌿 Maintain vegetation levels")
-        recommendations.append("🌱 Preserve existing green areas")
+        recommendations["long_term"].append(
+            "🌿 Preserve existing environment"
+        )
 
     return recommendations
 
 
 @router.get("/")
-def recommendation(temp: float, humidity: float, vegetation: float, zone: str):
+def recommendation(
+    temp: float,
+    humidity: float,
+    vegetation: float,
+    building_density: float = 0.5,
+    risk_level: str = "Normal",
+    risk_score: float = 0
+):
+    """
+    Smart AI-based heat mitigation recommendations
+    """
 
-    recs = generate_recommendations(temp, humidity, vegetation, zone)
+    recs = generate_smart_recommendations(
+        temp,
+        humidity,
+        vegetation,
+        building_density,
+        risk_level,
+        risk_score
+    )
 
     return {
-        "temperature": temp,
-        "zone": zone,
+        "status": "success",
+        "risk_level": risk_level,
+        "risk_score": risk_score,
         "recommendations": recs
     }

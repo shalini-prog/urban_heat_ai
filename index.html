@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HeatSafe India — AI Heat Risk Monitor</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+<!-- App styles -->
+<link rel="stylesheet" href="style.css" />
+
+<!-- Marker pop animation (global keyframe) -->
+<style>
+@keyframes markerPop {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.heat-tooltip {
+  background: rgba(7,16,29,0.93) !important;
+  border: 1px solid rgba(56,189,248,0.2) !important;
+  border-radius: 6px !important;
+  color: #d8e8f5 !important;
+  font-family: 'DM Mono', monospace !important;
+  font-size: 0.65rem !important;
+  padding: 5px 9px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+.heat-tooltip::before { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     TOPBAR
+══════════════════════════════════════════════ -->
+<header id="topbar">
+
+  <!-- Logo -->
+  <div class="logo">
+    <div class="logo-flame">🔥</div>
+    <div class="logo-text">
+      <h1>Heat<span>Safe</span> India</h1>
+      <small>AI HEAT RISK MONITORING SYSTEM</small>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Controls -->
+  <div class="tb-controls">
+
+    <!-- City select -->
+    <select id="citySelect" class="tb-select" title="Select city">
+      <option value="chennai">📍 Chennai</option>
+      <option value="delhi">📍 Delhi</option>
+    </select>
+
+    <!-- Layer toggle -->
+    <div class="layer-toggle">
+      <button id="layerRisk" class="btn active" title="Risk view">🌡 Risk</button>
+      <button id="layerTemp" class="btn" title="Temperature view">☀️ Temp</button>
+    </div>
+
+    <!-- Address search -->
+    <div class="search-wrap">
+      <input id="addrInput" type="text" placeholder="Search address…" autocomplete="off" />
+      <button class="search-icon-btn" id="btnSearch" title="Search address">🔍</button>
+    </div>
+
+    <!-- Action buttons -->
+    <button class="btn primary" id="btnRefresh" title="Reload heatmap">
+      <span>⟳</span><span>Refresh</span>
+    </button>
+    <button class="btn loc-btn" id="btnMyLoc" title="Use my location">
+      <span>📍</span><span>My Location</span>
+    </button>
+    <button class="btn danger-btn" id="btnClear" title="Clear map">
+      <span>✕</span><span>Clear</span>
+    </button>
+
+  </div>
+
+  <!-- Live indicator -->
+  <div class="live-pill">
+    <div class="live-dot"></div> LIVE
+  </div>
+
+</header>
+
+<!-- Heatwave strip -->
+<div id="hw-strip">
+  🚨 <strong>HEATWAVE ALERT ACTIVE</strong> — Extreme temperatures detected. Emergency measures recommended.
+</div>
+
+<!-- ══════════════════════════════════════════════
+     MAIN LAYOUT
+══════════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- MAP -->
+  <div id="map-wrap">
+    <div id="map"></div>
+
+    <!-- Loader overlay -->
+    <div id="loader">
+      <div class="spinner"></div>
+      <div class="loader-msg">FETCHING HEAT DATA…</div>
+    </div>
+
+    <!-- Legend -->
+    <div id="legend">
+      <div class="legend-title">Risk Level</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#22d3a0;box-shadow:0 0 6px #22d3a0"></div> Normal</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#f0c050;box-shadow:0 0 6px #f0c050"></div> Caution</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#f97316;box-shadow:0 0 6px #f97316"></div> Danger</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#ef4444;box-shadow:0 0 6px #ef4444"></div> Extreme</div>
+    </div>
+
+    <!-- Sidebar toggle (desktop) -->
+    <div id="sidebar-toggle" title="Toggle sidebar">⊞</div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════════════ -->
+  <aside id="sidebar">
+
+    <!-- Stat strip -->
+    <div id="stat-strip">
+      <div class="stat-cell ext">
+        <div class="sc-label">⚠ Extreme</div>
+        <div class="sc-val" id="cntExtreme">—</div>
+      </div>
+      <div class="stat-cell dgr">
+        <div class="sc-label">🔥 Danger</div>
+        <div class="sc-val" id="cntDanger">—</div>
+      </div>
+      <div class="stat-cell ctn">
+        <div class="sc-label">⚡ Caution</div>
+        <div class="sc-val" id="cntCaution">—</div>
+      </div>
+      <div class="stat-cell sfe">
+        <div class="sc-label">✅ Safe</div>
+        <div class="sc-val" id="cntSafe">—</div>
+      </div>
+    </div>
+
+    <!-- Scrollable panel -->
+    <div id="panel">
+
+      <!-- ── LOCATION DETAIL ── -->
+      <div>
+        <div class="sec-head">📍 Location Detail</div>
+        <div class="card" id="locationPanel">
+          <div class="empty">
+            <div class="empty-ico">🗺️</div>
+            Click a map marker to view<br>location heat risk details
+          </div>
+        </div>
+      </div>
+
+      <!-- ── WORKER SAFETY ── -->
+      <div id="safetySection" style="display:none">
+        <div class="sec-head">👷 Worker Safety</div>
+        <div class="card" id="safetyPanel"></div>
+      </div>
+
+      <!-- ── RECOMMENDATIONS ── -->
+      <div id="recsSection" style="display:none">
+        <div class="sec-head">📋 Recommendations</div>
+        <div class="card" id="recsPanel"></div>
+      </div>
+
+      <!-- ── FORECAST ── -->
+      <div>
+        <div class="sec-head">📈 Heat Forecast</div>
+        <div class="card">
+          <div class="fc-inputs">
+            <input type="number" id="fcLat" placeholder="Latitude" step="0.0001" />
+            <input type="number" id="fcLon" placeholder="Longitude" step="0.0001" />
+          </div>
+          <button class="btn primary" id="btnForecast" style="width:100%;margin-bottom:12px;justify-content:center">
+            Run Forecast →
+          </button>
+          <div id="forecastResult">
+            <div style="color:var(--text3);font-size:0.65rem;text-align:center;padding:8px 0">
+              Enter coordinates or click a marker first
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /panel -->
+  </aside>
+
+</div><!-- /app -->
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- App JS -->
+<script src="app.js"></script>
+
+</body>
+</html>

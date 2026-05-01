@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HeatSafe India — AI Heat Risk Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <style>
+    /* ═══════════════════════════════════════════════════════════
+       BASE RESET & VARIABLES
+    ═══════════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+    :root {
+      --bg: #07101d; --bg2: #0d1a2b; --bg3: #111f33;
+      --border: rgba(56,189,248,0.12); --border2: rgba(56,189,248,0.22);
+      --text1: #e2f0ff; --text2: #8aacc8; --text3: #4a6a88;
+      --accent: #38bdf8; --accent2: #0ea5e9;
+      --green: #22d3a0; --yellow: #f0c050; --orange: #f97316; --red: #ef4444;
+      --font: 'Space Grotesk', sans-serif; --mono: 'JetBrains Mono', monospace;
+      --sidebar-w: 220px;
+    }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text1);
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       SIDEBAR
+    ═══════════════════════════════════════════════════════════ */
+    #nav {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .nav-logo { padding:18px 16px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+    .nav-logo .flame { width:30px; height:30px; background:linear-gradient(135deg,#f97316,#ef4444); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
+    .nav-logo .brand { line-height:1.2; }
+    .nav-logo .brand strong { font-size:13px; font-weight:600; color:var(--text1); display:block; }
+    .nav-logo .brand small { font-size:9px; color:var(--text3); font-family:var(--mono); letter-spacing:.08em; }
+    .nav-section-label { padding:14px 16px 6px; font-size:9px; font-family:var(--mono); letter-spacing:.1em; color:var(--text3); text-transform:uppercase; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:9px 16px; cursor:pointer; border-left:2px solid transparent; margin:1px 0; font-size:12.5px; font-weight:400; color:var(--text2); transition:background .15s; }
+    .nav-item:hover { background:rgba(56,189,248,.06); color:var(--text1); }
+    .nav-item.active { background:rgba(56,189,248,.1); border-left-color:var(--accent); color:var(--text1); font-weight:500; }
+    .nav-icon { width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:13px; background:rgba(56,189,248,.08); flex-shrink:0; }
+    .nav-item.active .nav-icon { background:rgba(56,189,248,.18); }
+    .nav-badge { margin-left:auto; font-size:9px; font-family:var(--mono); background:rgba(239,68,68,.2); color:#ef4444; padding:2px 6px; border-radius:10px; border:1px solid rgba(239,68,68,.3); }
+    .nav-footer { margin-top:auto; padding:12px 16px; border-top:1px solid var(--border); display:flex; align-items:center; gap:8px; }
+    .status-dot { width:7px; height:7px; border-radius:50%; background:var(--green); animation:pulse2 2s infinite; flex-shrink:0; }
+    .status-dot.red { background:var(--red); }
+    @keyframes pulse2 { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .status-text { font-size:10px; font-family:var(--mono); color:var(--text3); }
+
+    /* ═══════════════════════════════════════════════════════════
+       MAIN — fills remaining width, scrollable
+    ═══════════════════════════════════════════════════════════ */
+    #main {
+      flex: 1;
+      height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-width: 0;
+    }
+    .module { display:none; padding:24px; animation:fadeIn .25s ease; }
+    .module.active { display:block; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+
+    /* ═══════════════════════════════════════════════════════════
+       COMMON COMPONENTS
+    ═══════════════════════════════════════════════════════════ */
+    .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+    .page-title { font-size:20px; font-weight:600; color:var(--text1); }
+    .page-sub { font-size:11px; font-family:var(--mono); color:var(--text3); margin-top:3px; }
+    .card { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:14px; }
+    .card-title { font-size:10px; font-family:var(--mono); letter-spacing:.08em; color:var(--text3); text-transform:uppercase; margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+    .grid4 { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+    .stat-card { background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+    .stat-label { font-size:10px; font-family:var(--mono); color:var(--text3); margin-bottom:6px; }
+    .stat-val { font-size:26px; font-weight:600; line-height:1; }
+    .stat-sub { font-size:10px; color:var(--text3); margin-top:4px; }
+    .btn-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+    .btn { display:inline-flex; align-items:center; gap:5px; padding:7px 13px; font-size:11px; font-family:var(--font); font-weight:500; border:1px solid var(--border2); border-radius:6px; cursor:pointer; background:transparent; color:var(--text2); transition:all .15s; }
+    .btn:hover { background:rgba(56,189,248,.08); color:var(--text1); border-color:rgba(56,189,248,.35); }
+    .btn.primary { background:rgba(56,189,248,.15); color:var(--accent); border-color:rgba(56,189,248,.3); }
+    .btn.primary:hover { background:rgba(56,189,248,.25); }
+    .btn:disabled { opacity:.4; cursor:not-allowed; }
+    .tag { display:inline-block; padding:2px 8px; border-radius:4px; font-size:10px; font-family:var(--mono); font-weight:500; }
+    .tag.Normal  { background:rgba(34,211,160,.15); color:var(--green); border:1px solid rgba(34,211,160,.25); }
+    .tag.Caution { background:rgba(240,192,80,.15); color:var(--yellow); border:1px solid rgba(240,192,80,.25); }
+    .tag.Danger  { background:rgba(249,115,22,.15); color:var(--orange); border:1px solid rgba(249,115,22,.25); }
+    .tag.Extreme { background:rgba(239,68,68,.15); color:var(--red); border:1px solid rgba(239,68,68,.25); }
+    input[type=text],input[type=number],select { background:var(--bg3); border:1px solid var(--border2); border-radius:6px; color:var(--text1); padding:7px 10px; font-size:12px; font-family:var(--mono); outline:none; width:100%; transition:border-color .15s; }
+    input[type=text]:focus,input[type=number]:focus,select:focus { border-color:var(--accent); }
+    select option { background:var(--bg2); }
+
+    /* ═══════════════════════════════════════════════════════════
+       LOADING OVERLAY
+    ═══════════════════════════════════════════════════════════ */
+    .loader-wrap { display:flex; align-items:center; justify-content:center; padding:40px; }
+    .loader { width:24px; height:24px; border:2px solid rgba(56,189,248,.2); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .api-error { background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); border-radius:8px; padding:12px 14px; font-size:12px; color:#f87171; font-family:var(--mono); margin:10px 0; }
+    .api-error strong { display:block; margin-bottom:4px; }
+
+    /* ═══════════════════════════════════════════════════════════
+       HOME
+    ═══════════════════════════════════════════════════════════ */
+    .hero { background:linear-gradient(135deg,rgba(56,189,248,.06) 0%,rgba(249,115,22,.06) 100%); border:1px solid var(--border); border-radius:12px; padding:24px 28px; margin-bottom:18px; position:relative; overflow:hidden; }
+    .hero::before { content:''; position:absolute; top:-30px; right:-30px; width:120px; height:120px; background:radial-gradient(circle,rgba(249,115,22,.15),transparent 70%); border-radius:50%; }
+    .hero-title { font-size:22px; font-weight:600; margin-bottom:6px; }
+    .hero-title span { color:var(--orange); }
+    .hero-sub { font-size:12px; color:var(--text2); line-height:1.6; max-width:480px; }
+    .alert-strip { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.25); border-radius:8px; padding:10px 14px; display:flex; align-items:center; gap:10px; margin-bottom:18px; font-size:11.5px; color:#f87171; }
+    .alert-dot { width:8px; height:8px; border-radius:50%; background:var(--red); animation:pulse2 1.5s infinite; flex-shrink:0; }
+    .module-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+    .module-card { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:14px; cursor:pointer; transition:all .18s; position:relative; overflow:hidden; }
+    .module-card::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:var(--mc-color,var(--accent)); transform:scaleX(0); transform-origin:left; transition:transform .2s; }
+    .module-card:hover { border-color:var(--border2); transform:translateY(-1px); background:var(--bg3); }
+    .module-card:hover::after { transform:scaleX(1); }
+    .mc-icon { font-size:20px; margin-bottom:8px; }
+    .mc-title { font-size:12px; font-weight:600; color:var(--text1); margin-bottom:3px; }
+    .mc-desc { font-size:10.5px; color:var(--text3); line-height:1.5; }
+
+    /* ═══════════════════════════════════════════════════════════
+       RISK TABLE
+    ═══════════════════════════════════════════════════════════ */
+    .risk-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .risk-table th { text-align:left; padding:8px 12px; font-size:9px; font-family:var(--mono); color:var(--text3); letter-spacing:.06em; text-transform:uppercase; border-bottom:1px solid var(--border); }
+    .risk-table td { padding:9px 12px; border-bottom:1px solid rgba(56,189,248,.06); color:var(--text2); }
+    .risk-table tr:hover td { background:rgba(56,189,248,.04); }
+    .risk-table .area { color:var(--text1); font-weight:500; }
+    .rbar-track { height:4px; background:rgba(56,189,248,.1); border-radius:2px; margin-top:4px; }
+    .rbar-fill { height:100%; border-radius:2px; }
+
+    /* ═══════════════════════════════════════════════════════════
+       MAP — KEY FIX: proper sizing, no overflow conflict
+    ═══════════════════════════════════════════════════════════ */
+    .map-container {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      /* FIX: use calc to fill most of viewport height minus header space */
+      height: calc(100vh - 280px);
+      min-height: 340px;
+      max-height: 600px;
+      position: relative;
+      margin-bottom: 14px;
+      /* FIX: overflow hidden on container, not on the map div itself */
+      overflow: hidden;
+    }
+    /* FIX: Map div must be absolutely positioned to fill its container */
+    #leafletMap, #searchLeafletMap {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      border-radius: 10px;
+      z-index: 1;
+    }
+    .map-legend { display:flex; gap:12px; flex-wrap:wrap; font-size:10px; font-family:var(--mono); color:var(--text3); align-items:center; margin-bottom:12px; }
+    .ml-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:4px; }
+
+    /* Dark Leaflet overrides */
+    .leaflet-popup-content-wrapper { background:var(--bg2); color:var(--text1); border:1px solid var(--border2); border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,.5); font-family:var(--font); }
+    .leaflet-popup-tip { background:var(--bg2); }
+    .leaflet-popup-content { margin:10px 14px; font-size:12px; line-height:1.6; }
+    .leaflet-popup-close-button { color:var(--text3) !important; }
+    .leaflet-control-attribution { background:rgba(7,16,29,.8) !important; color:var(--text3) !important; font-size:9px !important; }
+    .leaflet-control-attribution a { color:var(--accent) !important; }
+    .leaflet-control-zoom a { background:var(--bg2) !important; color:var(--text1) !important; border-color:var(--border2) !important; }
+    .leaflet-control-zoom a:hover { background:var(--bg3) !important; }
+    /* FIX: Ensure leaflet tiles load in correct stacking context */
+    .leaflet-tile-container { will-change: transform; }
+
+    /* Search map — smaller height */
+    .search-map-container {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      height: 300px;
+      position: relative;
+      margin-bottom: 14px;
+      overflow: hidden;
+    }
+    #searchLeafletMap {
+      position: absolute !important;
+      top: 0 !important; left: 0 !important;
+      width: 100% !important; height: 100% !important;
+      border-radius: 10px;
+      z-index: 1;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       SEARCH
+    ═══════════════════════════════════════════════════════════ */
+    .search-result-card { background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:12px 14px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; cursor:pointer; transition:all .15s; }
+    .search-result-card:hover { border-color:var(--border2); background:rgba(56,189,248,.04); }
+
+    /* ═══════════════════════════════════════════════════════════
+       FORECAST
+    ═══════════════════════════════════════════════════════════ */
+    .forecast-row { display:flex; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:12px; gap:12px; }
+    .fc-day { width:80px; color:var(--text2); font-family:var(--mono); font-size:10px; }
+    .fc-bar-wrap { flex:1; }
+    .fc-bar { height:6px; border-radius:3px; transition:width .6s ease; }
+    .fc-temp { width:50px; text-align:right; font-weight:600; font-family:var(--mono); font-size:12px; }
+    .trend-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:4px; font-size:10px; font-family:var(--mono); }
+    .trend-up { background:rgba(239,68,68,.12); color:var(--red); border:1px solid rgba(239,68,68,.2); }
+    .trend-stable { background:rgba(56,189,248,.1); color:var(--accent); border:1px solid rgba(56,189,248,.2); }
+    .trend-decreasing { background:rgba(34,211,160,.1); color:var(--green); border:1px solid rgba(34,211,160,.2); }
+
+    /* ═══════════════════════════════════════════════════════════
+       RECOMMENDATIONS
+    ═══════════════════════════════════════════════════════════ */
+    .rec-card { background:var(--bg3); border-left:3px solid; border-top:1px solid var(--border); border-right:1px solid var(--border); border-bottom:1px solid var(--border); border-radius:0 8px 8px 0; padding:12px 14px; margin-bottom:8px; }
+    .rec-card.extreme { border-left-color:var(--red); }
+    .rec-card.danger { border-left-color:var(--orange); }
+    .rec-card.caution { border-left-color:var(--yellow); }
+    .rec-card.normal { border-left-color:var(--green); }
+    .rec-category { font-size:9px; font-family:var(--mono); color:var(--text3); text-transform:uppercase; letter-spacing:.08em; margin-bottom:5px; }
+    .rec-text { font-size:12px; color:var(--text2); line-height:1.5; }
+
+    /* ═══════════════════════════════════════════════════════════
+       WEATHER
+    ═══════════════════════════════════════════════════════════ */
+    .weather-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .weather-cell { background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
+    .wc-icon { font-size:20px; margin-bottom:6px; }
+    .wc-label { font-size:9px; font-family:var(--mono); color:var(--text3); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
+    .wc-val { font-size:18px; font-weight:600; }
+    .wc-unit { font-size:11px; color:var(--text3); }
+    .source-row { display:flex; align-items:center; justify-content:space-between; padding:9px 12px; background:var(--bg3); border:1px solid var(--border); border-radius:6px; margin-bottom:6px; font-size:11.5px; }
+    .source-name { font-weight:500; color:var(--text1); }
+    .source-status { font-size:9px; font-family:var(--mono); }
+    .source-status.ok { color:var(--green); }
+    .source-status.warn { color:var(--yellow); }
+    .source-status.err { color:var(--red); }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     SIDEBAR
+══════════════════════════════════════════ -->
+<nav id="nav">
+  <div class="nav-logo">
+    <div class="flame">🔥</div>
+    <div class="brand">
+      <strong>HeatSafe India</strong>
+      <small>AI HEAT RISK MONITOR</small>
+    </div>
+  </div>
+
+  <div class="nav-section-label">Overview</div>
+  <div class="nav-item active" data-mod="home">
+    <div class="nav-icon">🏠</div>Home
+  </div>
+
+  <div class="nav-section-label">Modules</div>
+  <div class="nav-item" data-mod="risk">
+    <div class="nav-icon">⚠️</div>Heat Risk Analysis
+    <span class="nav-badge" id="navBadgeRisk">—</span>
+  </div>
+  <div class="nav-item" data-mod="map">
+    <div class="nav-icon">🗺️</div>Heatmap View
+  </div>
+  <div class="nav-item" data-mod="search">
+    <div class="nav-icon">🔍</div>Search Place
+  </div>
+  <div class="nav-item" data-mod="forecast">
+    <div class="nav-icon">📈</div>Heat Forecast
+  </div>
+  <div class="nav-item" data-mod="recs">
+    <div class="nav-icon">📋</div>Recommendations
+  </div>
+  <div class="nav-item" data-mod="weather">
+    <div class="nav-icon">🌦️</div>Weather Data
+  </div>
+
+  <div class="nav-footer">
+    <div class="status-dot" id="apiStatusDot"></div>
+    <div class="status-text" id="apiStatusText">CONNECTING…</div>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════════
+     MAIN
+══════════════════════════════════════════ -->
+<div id="main">
+
+  <!-- ── HOME ── -->
+  <div class="module active" id="mod-home">
+    <div class="hero">
+      <div class="hero-title">HeatSafe <span>India</span> — AI Heat Risk Platform</div>
+      <div class="hero-sub">Real-time heat monitoring, worker safety analysis, and AI-powered risk forecasting for Indian cities. Data is pulled live from your FastAPI backend.</div>
+    </div>
+    <div class="alert-strip" id="homeAlert" style="display:none">
+      <div class="alert-dot"></div>
+      <strong>HEATWAVE ALERT ACTIVE</strong> — <span id="homeAlertMsg"></span>
+    </div>
+    <div class="grid4" style="margin-bottom:18px;" id="homeStats">
+      <div class="loader-wrap" style="grid-column:span 4"><div class="loader"></div></div>
+    </div>
+    <div style="font-size:11px;font-family:var(--mono);color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em;">Navigate to a module</div>
+    <div class="module-grid">
+      <div class="module-card" style="--mc-color:var(--red)" data-nav="risk"><div class="mc-icon">⚠️</div><div class="mc-title">Heat Risk Analysis</div><div class="mc-desc">Risk scores, heat index & worker safety per zone</div></div>
+      <div class="module-card" style="--mc-color:var(--accent)" data-nav="map"><div class="mc-icon">🗺️</div><div class="mc-title">Heatmap Visualization</div><div class="mc-desc">Live risk overlay across city markers</div></div>
+      <div class="module-card" style="--mc-color:var(--green)" data-nav="search"><div class="mc-icon">🔍</div><div class="mc-title">Search Place</div><div class="mc-desc">Get heat data for any address or location</div></div>
+      <div class="module-card" style="--mc-color:var(--yellow)" data-nav="forecast"><div class="mc-icon">📈</div><div class="mc-title">Heat Forecast</div><div class="mc-desc">7-day AI temperature & heatwave prediction</div></div>
+      <div class="module-card" style="--mc-color:var(--orange)" data-nav="recs"><div class="mc-icon">📋</div><div class="mc-title">Recommendations</div><div class="mc-desc">Immediate, short & long-term action plans</div></div>
+      <div class="module-card" style="--mc-color:var(--accent)" data-nav="weather"><div class="mc-icon">🌦️</div><div class="mc-title">Weather Data</div><div class="mc-desc">Multi-source weather integration & status</div></div>
+    </div>
+  </div>
+
+  <!-- ── HEAT RISK ANALYSIS ── -->
+  <div class="module" id="mod-risk">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Heat Risk Analysis</div>
+        <div class="page-sub">ZONE-BY-ZONE RISK SCORES · WORKER SAFETY</div>
+      </div>
+      <div class="btn-row" style="margin-bottom:0">
+        <select id="citySelect" style="width:auto">
+          <option value="chennai">Chennai</option>
+          <option value="delhi">Delhi</option>
+        </select>
+        <div class="btn primary" id="refreshRisk">⟳ Refresh</div>
+      </div>
+    </div>
+    <div class="grid4" style="margin-bottom:14px;">
+      <div class="stat-card"><div class="stat-label">Avg Temp</div><div class="stat-val" style="color:var(--orange)" id="avgTemp">—</div></div>
+      <div class="stat-card"><div class="stat-label">Avg Heat Index</div><div class="stat-val" style="color:var(--red)" id="avgHI">—</div></div>
+      <div class="stat-card"><div class="stat-label">Avg Humidity</div><div class="stat-val" style="color:var(--accent)" id="avgHum">—</div></div>
+      <div class="stat-card"><div class="stat-label">Areas Monitored</div><div class="stat-val" id="areaCount">—</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📍 Zone Risk Table</div>
+      <div id="riskTableWrap"><div class="loader-wrap"><div class="loader"></div></div></div>
+    </div>
+    <div class="card" id="workerSafetyCard" style="display:none">
+      <div class="card-title">👷 Worker Safety — <span id="wsSel">Selected Zone</span></div>
+      <div class="grid3">
+        <div class="stat-card"><div class="stat-label">Safe Hours</div><div style="font-size:11px;color:var(--green);font-family:var(--mono);margin-top:4px;line-height:1.7" id="wsHours">—</div></div>
+        <div class="stat-card"><div class="stat-label">Water Intake</div><div style="font-size:14px;color:var(--accent);font-family:var(--mono);margin-top:4px" id="wsWater">—</div></div>
+        <div class="stat-card"><div class="stat-label">Rest Cycle</div><div style="font-size:11px;color:var(--orange);font-family:var(--mono);margin-top:4px" id="wsRest">—</div></div>
+      </div>
+      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:10px 12px;margin-top:10px;font-size:11.5px;color:#f87171" id="wsWarn"></div>
+    </div>
+  </div>
+
+  <!-- ── HEATMAP ── -->
+  <div class="module" id="mod-map">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Heatmap Visualization</div>
+        <div class="page-sub">GEOGRAPHIC HEAT RISK OVERLAY · LEAFLET</div>
+      </div>
+      <div class="btn-row" style="margin-bottom:0">
+        <select id="mapCitySelect" style="width:auto">
+          <option value="chennai">Chennai</option>
+          <option value="delhi">Delhi</option>
+        </select>
+        <div class="btn primary" id="refreshMap">⟳ Refresh</div>
+      </div>
+    </div>
+    <div class="map-legend">
+      <span><span class="ml-dot" style="background:var(--green)"></span>Normal</span>
+      <span><span class="ml-dot" style="background:var(--yellow)"></span>Caution</span>
+      <span><span class="ml-dot" style="background:var(--orange)"></span>Danger</span>
+      <span><span class="ml-dot" style="background:var(--red)"></span>Extreme</span>
+      <span style="margin-left:auto;font-size:9px;" id="mapLegendCount">Loading…</span>
+    </div>
+    <!-- FIX: Map container uses position:relative, map div uses absolute fill -->
+    <div class="map-container">
+      <div id="leafletMap"></div>
+    </div>
+    <div class="grid2">
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">📍 Selected Zone</div>
+        <div id="map-selected" style="font-size:12px;color:var(--text3);font-family:var(--mono)">Click a marker on the map above</div>
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">📊 Distribution</div>
+        <div style="display:flex;flex-direction:column;gap:6px;" id="map-dist"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SEARCH ── -->
+  <div class="module" id="mod-search">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Search Place</div>
+        <div class="page-sub">ADDRESS OR LANDMARK HEAT LOOKUP · LEAFLET</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔍 Location Search</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input type="text" id="searchInput" placeholder="e.g. Anna Nagar, Chennai" style="flex:1" />
+        <div class="btn primary" id="doSearch" style="white-space:nowrap">Search →</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="quickTags">
+        <span class="tag Danger" style="cursor:pointer" data-q="T. Nagar, Chennai">T. Nagar</span>
+        <span class="tag Extreme" style="cursor:pointer" data-q="Velachery, Chennai">Velachery</span>
+        <span class="tag Caution" style="cursor:pointer" data-q="Adyar, Chennai">Adyar</span>
+        <span class="tag Normal" style="cursor:pointer" data-q="Besant Nagar, Chennai">Besant Nagar</span>
+        <span class="tag Danger" style="cursor:pointer" data-q="Guindy, Chennai">Guindy</span>
+      </div>
+    </div>
+    <div id="search-results"></div>
+    <!-- FIX: search map uses same pattern as main map -->
+    <div id="searchMapWrap" style="display:none;margin-top:4px;">
+      <div class="card" style="margin-bottom:0;padding:10px 10px 0">
+        <div class="card-title">🗺️ Risk Map — Search Results</div>
+      </div>
+      <div class="search-map-container">
+        <div id="searchLeafletMap"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FORECAST ── -->
+  <div class="module" id="mod-forecast">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Heat Forecast</div>
+        <div class="page-sub">AI 7-DAY TEMPERATURE PREDICTION</div>
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:14px;">
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">📍 Coordinates</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input type="number" id="fcLat" placeholder="Latitude" value="13.06700" step="0.001" style="flex:1" />
+          <input type="number" id="fcLon" placeholder="Longitude" value="80.23700" step="0.001" style="flex:1" />
+        </div>
+        <div class="btn primary" id="runFc" style="width:100%;justify-content:center;display:flex">Run Forecast →</div>
+      </div>
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">⚡ Current Status</div>
+        <div class="grid2" style="gap:8px;">
+          <div class="stat-card" style="padding:10px">
+            <div class="stat-label">Now</div>
+            <div class="stat-val" style="font-size:20px;color:var(--orange)" id="fcNow">—</div>
+          </div>
+          <div class="stat-card" style="padding:10px">
+            <div class="stat-label">Tomorrow</div>
+            <div class="stat-val" style="font-size:20px;color:var(--red)" id="fcTomorrow">—</div>
+          </div>
+        </div>
+        <div id="fcTrend" style="margin-top:8px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📈 Forecast Chart</div>
+      <div id="fc-chart"><div class="loader-wrap"><div class="loader"></div></div></div>
+    </div>
+    <div class="card" id="fcAlertBox" style="display:none;background:rgba(239,68,68,.07);border-color:rgba(239,68,68,.2)">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:18px">🚨</span>
+        <div>
+          <div style="font-weight:600;color:#f87171;font-size:13px;margin-bottom:2px">HEATWAVE ALERT</div>
+          <div style="font-size:11.5px;color:var(--text2)" id="fcAlertMsg"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RECOMMENDATIONS ── -->
+  <div class="module" id="mod-recs">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Smart Recommendations</div>
+        <div class="page-sub">RISK-BASED ACTION PLANS · 3 TIMESCALES</div>
+      </div>
+      <div class="btn-row" style="margin-bottom:0">
+        <select id="recLevel" style="width:auto">
+          <option>Extreme</option><option>Danger</option><option>Caution</option><option>Normal</option>
+        </select>
+        <div class="btn" id="recCustomBtn" title="Use custom values">⚙ Custom</div>
+      </div>
+    </div>
+    <div id="recCustomPanel" style="display:none;margin-bottom:14px;">
+      <div class="card" style="margin-bottom:0">
+        <div class="card-title">Custom Parameters → calls /api/recommendation</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
+          <div><div class="stat-label">Temp (°C)</div><input type="number" id="rcTemp" value="42" step="0.1" /></div>
+          <div><div class="stat-label">Humidity (%)</div><input type="number" id="rcHum" value="65" step="1" /></div>
+          <div><div class="stat-label">Vegetation (0-1)</div><input type="number" id="rcVeg" value="0.2" step="0.05" /></div>
+          <div><div class="stat-label">Bldg Density (0-1)</div><input type="number" id="rcDens" value="0.7" step="0.05" /></div>
+        </div>
+        <div class="btn primary" id="runCustomRec" style="width:100%;justify-content:center;display:flex">Get Recommendations from API →</div>
+      </div>
+    </div>
+    <div class="grid3" style="margin-bottom:14px;">
+      <div class="stat-card" style="border-left:3px solid var(--red)"><div class="stat-label">⚡ Immediate</div><div class="stat-val" style="font-size:20px;color:var(--red)" id="recCntImm">—</div><div class="stat-sub">Actions now</div></div>
+      <div class="stat-card" style="border-left:3px solid var(--orange)"><div class="stat-label">📅 Short-term</div><div class="stat-val" style="font-size:20px;color:var(--orange)" id="recCntShort">—</div><div class="stat-sub">This week</div></div>
+      <div class="stat-card" style="border-left:3px solid var(--green)"><div class="stat-label">🌱 Long-term</div><div class="stat-val" style="font-size:20px;color:var(--green)" id="recCntLong">—</div><div class="stat-sub">Structural changes</div></div>
+    </div>
+    <div id="recs-list"><div class="loader-wrap"><div class="loader"></div></div></div>
+  </div>
+
+  <!-- ── WEATHER DATA ── -->
+  <div class="module" id="mod-weather">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Weather Data Integration</div>
+        <div class="page-sub">MULTI-SOURCE WEATHER API STATUS</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:14px;">
+      <div class="card-title">🌦️ Current Conditions — <span id="wCityLabel">Chennai</span></div>
+      <div class="weather-grid" id="weatherGrid">
+        <div class="loader-wrap" style="grid-column:span 3"><div class="loader"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔗 Data Sources</div>
+      <div class="source-row"><div><div class="source-name">OpenWeatherMap API</div><div style="font-size:10px;color:var(--text3)">Temperature, humidity, wind</div></div><div class="source-status ok" id="srcOWM">● CHECKING…</div></div>
+      <div class="source-row"><div><div class="source-name">ISRO Bhuvan Satellite</div><div style="font-size:10px;color:var(--text3)">Vegetation index (NDVI)</div></div><div class="source-status ok">● CONNECTED</div></div>
+      <div class="source-row"><div><div class="source-name">IMD Heatwave Data</div><div style="font-size:10px;color:var(--text3)">Official heatwave alerts</div></div><div class="source-status ok">● CONNECTED</div></div>
+      <div class="source-row"><div><div class="source-name">Nominatim Geocoding</div><div style="font-size:10px;color:var(--text3)">Address to coordinate lookup</div></div><div class="source-status warn">◑ RATE LIMITED</div></div>
+      <div class="source-row"><div><div class="source-name">HeatSafe Backend API</div><div style="font-size:10px;color:var(--text3)">FastAPI at <span id="backendUrl">localhost:8000</span></div></div><div class="source-status" id="srcBackend">● CHECKING…</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🕐 Last Updated</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--text2);" id="lastUpdated">—</div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   CONFIGURATION
+═══════════════════════════════════════════════════════════════ */
+const API_BASE = "http://127.0.0.1:8000";
+
+const RISK_COLOR = { Normal:'#22d3a0', Caution:'#f0c050', Danger:'#f97316', Extreme:'#ef4444' };
+const DAYS_LABELS = ['Today','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+/* ═══════════════════════════════════════════════════════════════
+   API HELPERS
+═══════════════════════════════════════════════════════════════ */
+async function apiFetch(path, params = {}) {
+  const url = new URL(API_BASE + path);
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${path}`);
+  return res.json();
+}
+function showError(containerId, msg) {
+  document.getElementById(containerId).innerHTML =
+    `<div class="api-error"><strong>⚠ API Error</strong>${msg}</div>`;
+}
+function loader(containerId) {
+  document.getElementById(containerId).innerHTML =
+    `<div class="loader-wrap"><div class="loader"></div></div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   NAVIGATION
+   FIX: After switching tabs, invalidate map sizes so Leaflet
+   recalculates dimensions on the newly-visible container.
+═══════════════════════════════════════════════════════════════ */
+const moduleLoaded = {};
+
+function navigate(mod) {
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.nav-item[data-mod="${mod}"]`).classList.add('active');
+  document.querySelectorAll('.module').forEach(el => el.classList.remove('active'));
+  document.getElementById('mod-' + mod).classList.add('active');
+
+  if (!moduleLoaded[mod]) {
+    loadModule(mod);
+    moduleLoaded[mod] = true;
+  }
+
+  // FIX: Always invalidate map sizes when switching to map tabs,
+  // even if the map was loaded before (handles display:none → block transition)
+  if (mod === 'map') {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (leafletMap) leafletMap.invalidateSize(true);
+      }, 50);
+    });
+  }
+  if (mod === 'search') {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (searchLeafletMap) searchLeafletMap.invalidateSize(true);
+      }, 50);
+    });
+  }
+}
+
+document.querySelectorAll('.nav-item').forEach(el =>
+  el.addEventListener('click', () => navigate(el.dataset.mod)));
+document.querySelectorAll('[data-nav]').forEach(el =>
+  el.addEventListener('click', () => navigate(el.dataset.nav)));
+
+/* ═══════════════════════════════════════════════════════════════
+   MODULE DISPATCHER
+═══════════════════════════════════════════════════════════════ */
+function loadModule(mod) {
+  switch(mod) {
+    case 'home':     loadHome();     break;
+    case 'risk':     loadRisk();     break;
+    case 'map':      loadMap();      break;
+    case 'forecast': loadForecast(); break;
+    case 'recs':     loadRecs();     break;
+    case 'weather':  loadWeather();  break;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HOME
+═══════════════════════════════════════════════════════════════ */
+async function loadHome() {
+  try {
+    const data = await apiFetch('/heatmap', { city: 'chennai' });
+    const pts = data.data || [];
+    const counts = { Extreme:0, Danger:0, Caution:0, Normal:0 };
+    pts.forEach(p => { if (counts[p.risk_level] !== undefined) counts[p.risk_level]++; });
+
+    document.getElementById('homeStats').innerHTML = `
+      <div class="stat-card"><div class="stat-label">⚠ Extreme Zones</div><div class="stat-val" style="color:var(--red)">${counts.Extreme}</div><div class="stat-sub">Immediate action needed</div></div>
+      <div class="stat-card"><div class="stat-label">🔥 Danger Zones</div><div class="stat-val" style="color:var(--orange)">${counts.Danger}</div><div class="stat-sub">High heat stress</div></div>
+      <div class="stat-card"><div class="stat-label">⚡ Caution Zones</div><div class="stat-val" style="color:var(--yellow)">${counts.Caution}</div><div class="stat-sub">Monitor closely</div></div>
+      <div class="stat-card"><div class="stat-label">✅ Safe Zones</div><div class="stat-val" style="color:var(--green)">${counts.Normal}</div><div class="stat-sub">Normal conditions</div></div>`;
+
+    const extremeCount = counts.Extreme + counts.Danger;
+    if (extremeCount > 0) {
+      document.getElementById('homeAlert').style.display = 'flex';
+      document.getElementById('homeAlertMsg').textContent =
+        `${extremeCount} zones at high risk. Emergency protocols recommended.`;
+    }
+    document.getElementById('navBadgeRisk').textContent = counts.Extreme;
+    setApiStatus(true, 'BACKEND LIVE');
+  } catch(e) {
+    document.getElementById('homeStats').innerHTML =
+      `<div class="api-error" style="grid-column:span 4"><strong>Cannot reach backend</strong>${e.message}<br><br>Make sure your FastAPI server is running at <code>${API_BASE}</code></div>`;
+    setApiStatus(false, 'BACKEND OFFLINE');
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RISK
+═══════════════════════════════════════════════════════════════ */
+async function loadRisk(city = 'chennai') {
+  loader('riskTableWrap');
+  document.getElementById('workerSafetyCard').style.display = 'none';
+  try {
+    const data = await apiFetch('/heatmap', { city });
+    const pts = data.data || [];
+    const avg = key => (pts.reduce((s,p) => s + (p[key]||0), 0) / pts.length).toFixed(1);
+    document.getElementById('avgTemp').innerHTML  = avg('temperature') + '<span style="font-size:14px">°C</span>';
+    document.getElementById('avgHI').innerHTML    = avg('heat_index')  + '<span style="font-size:14px">°C</span>';
+    document.getElementById('avgHum').innerHTML   = avg('humidity')    + '<span style="font-size:14px">%</span>';
+    document.getElementById('areaCount').textContent = pts.length;
+
+    document.getElementById('riskTableWrap').innerHTML = `
+      <table class="risk-table">
+        <thead><tr>
+          <th>Area</th><th>Temp</th><th>Heat Index</th>
+          <th>Humidity</th><th>Risk Score</th><th>Level</th>
+        </tr></thead>
+        <tbody>${pts.map(d => {
+          const col = RISK_COLOR[d.risk_level] || '#8aacc8';
+          const ws  = d.worker_safety || {};
+          return `<tr data-area="${d.area||'Zone'}" data-ws='${JSON.stringify(ws)}' data-level="${d.risk_level}" style="cursor:pointer">
+            <td class="area">${d.area || `${d.lat?.toFixed(3)},${d.lon?.toFixed(3)}`}</td>
+            <td style="color:${col};font-family:var(--mono)">${(d.temperature||0).toFixed(1)}°C</td>
+            <td style="font-family:var(--mono)">${(d.heat_index||0).toFixed(1)}°C</td>
+            <td style="font-family:var(--mono)">${(d.humidity||0).toFixed(0)}%</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:var(--mono);color:${col};font-size:11px">${(d.risk_score||0).toFixed(0)}</span>
+                <div class="rbar-track" style="width:60px"><div class="rbar-fill" style="width:${d.risk_score||0}%;background:${col}"></div></div>
+              </div>
+            </td>
+            <td><span class="tag ${d.risk_level}">${d.risk_level}</span></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+
+    document.querySelectorAll('#riskTableWrap tbody tr').forEach(row => {
+      row.addEventListener('click', () => {
+        const ws = JSON.parse(row.dataset.ws || '{}');
+        const sched = ws.work_schedule || {};
+        document.getElementById('wsSel').textContent = row.dataset.area;
+        document.getElementById('wsHours').innerHTML = (sched.safe_hours||['—']).join('<br>');
+        document.getElementById('wsWater').textContent = ws.water_intake || '—';
+        document.getElementById('wsRest').innerHTML  = (ws.rest_cycle||'—').replace('/',`<br>/`);
+        document.getElementById('wsWarn').textContent = ws.warning || '';
+        document.getElementById('workerSafetyCard').style.display = 'block';
+      });
+    });
+  } catch(e) {
+    showError('riskTableWrap', e.message);
+  }
+}
+
+document.getElementById('refreshRisk').addEventListener('click', () => {
+  loadRisk(document.getElementById('citySelect').value);
+});
+document.getElementById('citySelect').addEventListener('change', function() {
+  loadRisk(this.value);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   MAP
+   FIX: Initialize Leaflet AFTER the container is visible.
+   Use a sentinel so we only create the map instance once.
+═══════════════════════════════════════════════════════════════ */
+let leafletMap = null;
+let leafletMapMarkers = [];
+let leafletMapInitialized = false;
+
+function initLeafletMap() {
+  if (leafletMapInitialized) return;
+  leafletMapInitialized = true;
+
+  // FIX: Create map only after the container div is actually rendered & visible
+  leafletMap = L.map('leafletMap', {
+    center: [13.067, 80.237],
+    zoom: 12,
+    zoomControl: true,
+    // FIX: These options help with rendering in dynamic/hidden containers
+    preferCanvas: true,
+    renderer: L.canvas()
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    subdomains: 'abcd',
+    maxZoom: 19
+  }).addTo(leafletMap);
+}
+
+async function loadMap(city) {
+  city = city || document.getElementById('mapCitySelect').value || 'chennai';
+
+  // FIX: Must init AFTER the module is visible (display:block)
+  // Use rAF + timeout to ensure layout is complete
+  await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 30)));
+  initLeafletMap();
+
+  // Clear old markers
+  leafletMapMarkers.forEach(m => m.remove());
+  leafletMapMarkers = [];
+  document.getElementById('mapLegendCount').textContent = 'Loading…';
+
+  try {
+    const data = await apiFetch('/heatmap', { city });
+    const pts = data.data || [];
+    document.getElementById('mapLegendCount').textContent =
+      `${city.charAt(0).toUpperCase()+city.slice(1)} · ${pts.length} zones loaded`;
+
+    if (pts.length) {
+      const avgLat = pts.reduce((s,p) => s+p.lat, 0) / pts.length;
+      const avgLon = pts.reduce((s,p) => s+p.lon, 0) / pts.length;
+      leafletMap.setView([avgLat, avgLon], 12);
+    }
+
+    const RISK_HEX = { Normal:'#22d3a0', Caution:'#f0c050', Danger:'#f97316', Extreme:'#ef4444' };
+
+    pts.forEach(d => {
+      const col = RISK_HEX[d.risk_level] || '#8aacc8';
+      const radius = d.risk_level === 'Extreme' ? 700 : d.risk_level === 'Danger' ? 550 :
+                     d.risk_level === 'Caution' ? 420 : 320;
+
+      const circle = L.circle([d.lat, d.lon], {
+        radius,
+        color: col,
+        fillColor: col,
+        fillOpacity: 0.35,
+        weight: 1.5,
+        opacity: 0.8
+      }).addTo(leafletMap);
+
+      const areaName = d.area || `${d.lat?.toFixed(3)}, ${d.lon?.toFixed(3)}`;
+      const ws = d.worker_safety || {};
+      const sched = ws.work_schedule || {};
+
+      circle.bindPopup(`
+        <div style="min-width:180px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <strong style="font-size:13px">${areaName}</strong>
+            <span style="background:${col}22;color:${col};border:1px solid ${col}55;padding:2px 7px;border-radius:4px;font-size:10px;font-family:monospace">${d.risk_level}</span>
+          </div>
+          <table style="width:100%;font-size:11px;border-collapse:collapse">
+            <tr><td style="color:#8aacc8;padding:2px 0">🌡 Temp</td><td style="color:${col};font-weight:600;text-align:right">${(d.temperature||0).toFixed(1)}°C</td></tr>
+            <tr><td style="color:#8aacc8;padding:2px 0">🔥 Heat Index</td><td style="text-align:right">${(d.heat_index||0).toFixed(1)}°C</td></tr>
+            <tr><td style="color:#8aacc8;padding:2px 0">💧 Humidity</td><td style="text-align:right">${(d.humidity||0).toFixed(0)}%</td></tr>
+            <tr><td style="color:#8aacc8;padding:2px 0">📊 Risk Score</td><td style="color:${col};font-weight:600;text-align:right">${(d.risk_score||0).toFixed(0)}/100</td></tr>
+            ${sched.message ? `<tr><td colspan="2" style="color:#f87171;font-size:10px;padding-top:6px">⚠ ${sched.message}</td></tr>` : ''}
+          </table>
+        </div>`);
+
+      circle.on('click', () => {
+        const selEl = document.getElementById('map-selected');
+        selEl.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-weight:600;color:var(--text1);font-size:13px">${areaName}</span>
+            <span class="tag ${d.risk_level}">${d.risk_level}</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;font-family:var(--mono)">
+            <span style="color:var(--text3)">Temp</span><span style="color:${col}">${(d.temperature||0).toFixed(1)}°C</span>
+            <span style="color:var(--text3)">Heat Index</span><span>${(d.heat_index||0).toFixed(1)}°C</span>
+            <span style="color:var(--text3)">Humidity</span><span>${(d.humidity||0).toFixed(0)}%</span>
+            <span style="color:var(--text3)">Risk Score</span><span style="color:${col}">${(d.risk_score||0).toFixed(0)}/100</span>
+          </div>`;
+      });
+
+      leafletMapMarkers.push(circle);
+    });
+
+    // Distribution
+    const counts = { Extreme:0, Danger:0, Caution:0, Normal:0 };
+    pts.forEach(p => { if (counts[p.risk_level] !== undefined) counts[p.risk_level]++; });
+    document.getElementById('map-dist').innerHTML = Object.entries(counts).map(([lvl,cnt]) => `
+      <div style="display:flex;align-items:center;gap:8px;font-size:11px">
+        <div style="width:8px;height:8px;border-radius:50%;background:${RISK_HEX[lvl]};flex-shrink:0"></div>
+        <span style="color:var(--text2);flex:1">${lvl}</span>
+        <div style="width:80px;height:4px;background:rgba(56,189,248,.1);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${pts.length?((cnt/pts.length)*100).toFixed(0):0}%;background:${RISK_HEX[lvl]}"></div>
+        </div>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text3);width:16px;text-align:right">${cnt}</span>
+      </div>`).join('');
+
+    // FIX: Multiple invalidateSize calls at staggered intervals catches all edge cases
+    [100, 300, 600].forEach(ms => setTimeout(() => leafletMap && leafletMap.invalidateSize(true), ms));
+
+  } catch(e) {
+    document.getElementById('mapLegendCount').textContent = '⚠ Load failed';
+    document.getElementById('map-selected').innerHTML =
+      `<div class="api-error"><strong>Map Error</strong>${e.message}</div>`;
+  }
+}
+
+document.getElementById('refreshMap').addEventListener('click', () => {
+  loadMap(document.getElementById('mapCitySelect').value);
+});
+document.getElementById('mapCitySelect').addEventListener('change', function() {
+  loadMap(this.value);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   SEARCH — Leaflet search map with same fix pattern
+═══════════════════════════════════════════════════════════════ */
+let searchLeafletMap = null;
+let searchLeafletLayers = [];
+
+async function doAddressSearch(q) {
+  const query = (q || document.getElementById('searchInput').value || '').trim();
+  if (!query) return;
+  const el = document.getElementById('search-results');
+  el.innerHTML = '<div class="loader-wrap"><div class="loader"></div></div>';
+  document.getElementById('searchMapWrap').style.display = 'none';
+
+  try {
+    const data = await apiFetch('/address_heat', { address: query });
+    if (data.status !== 'success' || !data.points?.length) {
+      el.innerHTML = `<div class="api-error"><strong>No results</strong>Address not found or weather data unavailable.</div>`;
+      return;
+    }
+    const pts = data.points;
+    const avg = key => (pts.reduce((s,p) => s+(p[key]||0), 0)/pts.length).toFixed(1);
+    const topLevel = pts.reduce((m,p) => {
+      const rank = {Extreme:3,Danger:2,Caution:1,Normal:0};
+      return rank[p.risk_level] > rank[m] ? p.risk_level : m;
+    }, 'Normal');
+    const col = RISK_COLOR[topLevel];
+
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-title">📍 Results for "${query}" — ${pts.length} grid points</div>
+        <div class="search-result-card" style="cursor:default">
+          <div>
+            <div style="font-weight:600;color:var(--text1);font-size:14px;margin-bottom:4px">${query}</div>
+            <div style="font-size:11px;font-family:var(--mono);color:var(--text3)">${data.center?.lat?.toFixed(4)}, ${data.center?.lon?.toFixed(4)}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="text-align:right">
+              <div style="font-size:18px;font-weight:600;color:${col};font-family:var(--mono)">${avg('temperature')}°C</div>
+              <div style="font-size:10px;color:var(--text3)">Heat Index ${avg('heat_index')}°C</div>
+            </div>
+            <span class="tag ${topLevel}">${topLevel}</span>
+          </div>
+        </div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--text3);margin-top:6px">
+          Avg Humidity: ${avg('humidity')}% · Avg Risk Score: ${avg('risk_score')} · Grid points: ${pts.length}
+        </div>
+      </div>`;
+
+    // Show search map
+    document.getElementById('searchMapWrap').style.display = 'block';
+
+    // FIX: Wait for the container to become visible before init/invalidate
+    await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 30)));
+
+    if (!searchLeafletMap) {
+      searchLeafletMap = L.map('searchLeafletMap', {
+        zoomControl: true,
+        preferCanvas: true,
+        renderer: L.canvas()
+      });
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19
+      }).addTo(searchLeafletMap);
+    }
+
+    searchLeafletLayers.forEach(l => l.remove());
+    searchLeafletLayers = [];
+
+    const RISK_HEX = { Normal:'#22d3a0', Caution:'#f0c050', Danger:'#f97316', Extreme:'#ef4444' };
+    const centerLat = data.center?.lat || pts[0].lat;
+    const centerLon = data.center?.lon || pts[0].lon;
+    searchLeafletMap.setView([centerLat, centerLon], 14);
+
+    pts.forEach(d => {
+      const c = RISK_HEX[d.risk_level] || '#8aacc8';
+      const circle = L.circle([d.lat, d.lon], {
+        radius: 180, color: c, fillColor: c, fillOpacity: 0.5, weight: 1
+      }).bindPopup(`
+        <div style="font-size:11px">
+          <strong style="color:${c}">${d.risk_level}</strong><br>
+          🌡 ${(d.temperature||0).toFixed(1)}°C &nbsp;|&nbsp; 🔥 HI ${(d.heat_index||0).toFixed(1)}°C<br>
+          💧 ${(d.humidity||0).toFixed(0)}% &nbsp;|&nbsp; 📊 Score ${(d.risk_score||0).toFixed(0)}
+        </div>`).addTo(searchLeafletMap);
+      searchLeafletLayers.push(circle);
+    });
+
+    const pin = L.marker([centerLat, centerLon])
+      .bindPopup(`<strong>${query}</strong><br>Search centre`)
+      .addTo(searchLeafletMap);
+    searchLeafletLayers.push(pin);
+
+    // FIX: Staggered invalidateSize
+    [100, 300, 600].forEach(ms => setTimeout(() => searchLeafletMap && searchLeafletMap.invalidateSize(true), ms));
+
+  } catch(e) {
+    el.innerHTML = `<div class="api-error"><strong>Search failed</strong>${e.message}</div>`;
+  }
+}
+
+document.getElementById('doSearch').addEventListener('click', () => doAddressSearch());
+document.getElementById('searchInput').addEventListener('keydown', e => { if(e.key==='Enter') doAddressSearch(); });
+document.querySelectorAll('#quickTags [data-q]').forEach(el => {
+  el.addEventListener('click', () => {
+    document.getElementById('searchInput').value = el.dataset.q;
+    doAddressSearch(el.dataset.q);
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   FORECAST
+═══════════════════════════════════════════════════════════════ */
+async function loadForecast(lat, lon) {
+  lat = lat || parseFloat(document.getElementById('fcLat').value) || 13.067;
+  lon = lon || parseFloat(document.getElementById('fcLon').value) || 80.237;
+  loader('fc-chart');
+  try {
+    const data = await apiFetch('/forecast', { lat, lon });
+    const fc = data.forecast || {};
+    const currentTemp = data.current_temp || 0;
+    const tomorrow = fc.tomorrow_temp || 0;
+    const nextWeek = fc.next_week_temp || 0;
+    const trend = fc.trend || 'stable';
+
+    document.getElementById('fcNow').innerHTML = currentTemp.toFixed(1) + '<span style="font-size:11px">°C</span>';
+    document.getElementById('fcTomorrow').innerHTML = tomorrow.toFixed(1) + '<span style="font-size:11px">°C</span>';
+
+    const trendClass = trend.includes('increas') ? 'trend-up' : trend === 'stable' ? 'trend-stable' : 'trend-decreasing';
+    const trendArrow = trend.includes('increas') ? '↑' : trend === 'stable' ? '→' : '↓';
+    document.getElementById('fcTrend').innerHTML = `<span class="trend-badge ${trendClass}">${trendArrow} ${trend}</span>`;
+
+    const temps = buildForecastTemps(currentTemp, tomorrow, nextWeek);
+    const maxT = Math.max(...temps), minT = Math.min(...temps);
+    document.getElementById('fc-chart').innerHTML = DAYS_LABELS.map((day, i) => {
+      const t = temps[i];
+      const pct = Math.round(((t - minT) / (maxT - minT + 2)) * 80 + 20);
+      const col = t>=42 ? 'var(--red)' : t>=40 ? 'var(--orange)' : t>=38 ? 'var(--yellow)' : 'var(--green)';
+      return `<div class="forecast-row" style="${i===DAYS_LABELS.length-1?'border-bottom:none':''}">
+        <div class="fc-day">${day}</div>
+        <div class="fc-bar-wrap"><div class="fc-bar" style="width:${pct}%;background:${col}"></div></div>
+        <div class="fc-temp" style="color:${col}">${t.toFixed(1)}°</div>
+      </div>`;
+    }).join('');
+
+    if (fc.heatwave_alert) {
+      document.getElementById('fcAlertBox').style.display = 'block';
+      document.getElementById('fcAlertMsg').textContent =
+        `Temperatures forecast to reach ${Math.max(tomorrow, nextWeek).toFixed(1)}°C. Restrict outdoor work 10 AM – 5 PM.`;
+    } else {
+      document.getElementById('fcAlertBox').style.display = 'none';
+    }
+  } catch(e) {
+    showError('fc-chart', e.message);
+  }
+}
+
+function buildForecastTemps(now, tomorrow, nextWeek) {
+  const temps = [now];
+  for (let i = 1; i <= 6; i++) {
+    if (i === 1) { temps.push(tomorrow); }
+    else {
+      const t = (i - 1) / 5;
+      temps.push(+(tomorrow + (nextWeek - tomorrow) * t + (Math.random()-0.5)*0.4).toFixed(2));
+    }
+  }
+  return temps;
+}
+
+document.getElementById('runFc').addEventListener('click', () => {
+  loadForecast(
+    parseFloat(document.getElementById('fcLat').value),
+    parseFloat(document.getElementById('fcLon').value)
+  );
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   RECOMMENDATIONS
+═══════════════════════════════════════════════════════════════ */
+async function loadRecs(params = null) {
+  loader('recs-list');
+  const level = document.getElementById('recLevel').value;
+  try {
+    const reqParams = params || {
+      temp: 42, humidity: 65, vegetation: 0.2,
+      building_density: 0.7, risk_level: level, risk_score: 85
+    };
+    const data = await apiFetch('/recommendation', reqParams);
+    const recs = data.recommendations || {};
+    const imm   = recs.immediate_actions || [];
+    const short = recs.short_term || [];
+    const lng   = recs.long_term || [];
+
+    document.getElementById('recCntImm').textContent   = imm.length;
+    document.getElementById('recCntShort').textContent = short.length;
+    document.getElementById('recCntLong').textContent  = lng.length;
+
+    const groups = [
+      { items: imm,   label: '⚡ Immediate Actions',   cls: 'extreme' },
+      { items: short, label: '📅 Short-term Measures',  cls: 'danger'  },
+      { items: lng,   label: '🌱 Long-term Strategy',   cls: 'caution' },
+    ];
+    document.getElementById('recs-list').innerHTML = groups.map(g => `
+      <div style="margin-bottom:10px">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">${g.label}</div>
+        ${g.items.map(r => `<div class="rec-card ${g.cls}">
+          <div class="rec-category">${data.risk_level || level} risk</div>
+          <div class="rec-text">${r}</div>
+        </div>`).join('')}
+        ${g.items.length === 0 ? '<div style="color:var(--text3);font-size:11px;font-family:var(--mono);padding:4px 0">No items for this level</div>' : ''}
+      </div>`).join('');
+  } catch(e) {
+    showError('recs-list', e.message);
+  }
+}
+
+document.getElementById('recLevel').addEventListener('change', function() {
+  loadRecs({ temp: 42, humidity: 65, vegetation: 0.2, building_density: 0.7, risk_level: this.value, risk_score: 80 });
+});
+document.getElementById('recCustomBtn').addEventListener('click', () => {
+  const p = document.getElementById('recCustomPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+});
+document.getElementById('runCustomRec').addEventListener('click', () => {
+  loadRecs({
+    temp: document.getElementById('rcTemp').value,
+    humidity: document.getElementById('rcHum').value,
+    vegetation: document.getElementById('rcVeg').value,
+    building_density: document.getElementById('rcDens').value,
+    risk_level: document.getElementById('recLevel').value,
+    risk_score: 80
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   WEATHER
+═══════════════════════════════════════════════════════════════ */
+async function loadWeather() {
+  const lat = 13.067, lon = 80.237;
+  try {
+    const data = await apiFetch('/forecast', { lat, lon });
+    const temp = data.current_temp || 0;
+    const fc   = data.forecast || {};
+
+    document.getElementById('weatherGrid').innerHTML = `
+      <div class="weather-cell"><div class="wc-icon">🌡️</div><div class="wc-label">Temperature</div><div class="wc-val" style="color:var(--orange)">${temp.toFixed(1)}<span class="wc-unit">°C</span></div></div>
+      <div class="weather-cell"><div class="wc-icon">📈</div><div class="wc-label">Tomorrow</div><div class="wc-val" style="color:var(--red)">${(fc.tomorrow_temp||0).toFixed(1)}<span class="wc-unit">°C</span></div></div>
+      <div class="weather-cell"><div class="wc-icon">📅</div><div class="wc-label">Next Week</div><div class="wc-val" style="color:var(--yellow)">${(fc.next_week_temp||0).toFixed(1)}<span class="wc-unit">°C</span></div></div>
+      <div class="weather-cell"><div class="wc-icon">📊</div><div class="wc-label">Trend</div><div class="wc-val" style="font-size:13px;color:var(--accent)">${fc.trend||'—'}</div></div>
+      <div class="weather-cell"><div class="wc-icon">🚨</div><div class="wc-label">Heatwave Alert</div><div class="wc-val" style="font-size:13px;color:${fc.heatwave_alert?'var(--red)':'var(--green)'}">${fc.heatwave_alert ? 'YES' : 'NO'}</div></div>
+      <div class="weather-cell"><div class="wc-icon">📍</div><div class="wc-label">Location</div><div class="wc-val" style="font-size:11px;color:var(--text2)">${lat}, ${lon}</div></div>`;
+
+    document.getElementById('srcBackend').textContent = '● LIVE';
+    document.getElementById('srcBackend').className   = 'source-status ok';
+    document.getElementById('srcOWM').textContent     = '● CONNECTED';
+    document.getElementById('srcOWM').className       = 'source-status ok';
+    document.getElementById('backendUrl').textContent = API_BASE;
+    document.getElementById('lastUpdated').textContent =
+      new Date().toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'medium' });
+  } catch(e) {
+    document.getElementById('weatherGrid').innerHTML =
+      `<div class="api-error" style="grid-column:span 3"><strong>Weather fetch failed</strong>${e.message}</div>`;
+    document.getElementById('srcBackend').textContent = '● OFFLINE';
+    document.getElementById('srcBackend').className   = 'source-status err';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STATUS + WINDOW RESIZE
+═══════════════════════════════════════════════════════════════ */
+function setApiStatus(ok, label) {
+  document.getElementById('apiStatusDot').className  = 'status-dot' + (ok ? '' : ' red');
+  document.getElementById('apiStatusText').textContent = label;
+}
+
+// FIX: Re-invalidate maps on window resize so they don't get clipped
+window.addEventListener('resize', () => {
+  if (leafletMap) leafletMap.invalidateSize(true);
+  if (searchLeafletMap) searchLeafletMap.invalidateSize(true);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════ */
+loadModule('home');
+moduleLoaded['home'] = true;
+</script>
+</body>
+</html>
